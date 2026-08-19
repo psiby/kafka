@@ -18,15 +18,60 @@ package org.apache.kafka.connect.runtime.rest.entities;
 
 import org.apache.kafka.connect.util.ConnectorTaskId;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Information about a connector, returned by several REST endpoints.
+ * <p>
+ * {@code offsetsStatus} is only populated by {@code POST /connectors} when the creation request included
+ * {@code initial_offsets}; it describes the outcome of writing those offsets. It is omitted from the serialized form
+ * whenever it is null, so the responses of the other endpoints that return this type
+ * ({@code GET /connectors/{connector}}, {@code PUT}/{@code PATCH /connectors/{connector}/config} and
+ * {@code GET /connectors?expand=info}) are unchanged.
+ */
 public record ConnectorInfo(
     @JsonProperty("name") String name,
     @JsonProperty("config") Map<String, String> config,
     @JsonProperty("tasks") List<ConnectorTaskId> tasks,
-    @JsonProperty("type") ConnectorType type
+    @JsonProperty("type") ConnectorType type,
+    @JsonProperty("offsets_status") @JsonInclude(JsonInclude.Include.NON_NULL) String offsetsStatus
 ) {
+    /**
+     * Canonical constructor, declared explicitly and annotated so that Jackson unambiguously uses it as the creator
+     * rather than having to choose between this and the convenience constructor below. Deserialization matters here
+     * because a worker that is not the leader forwards requests and parses the leader's response body into this type.
+     */
+    @JsonCreator
+    public ConnectorInfo(
+        @JsonProperty("name") String name,
+        @JsonProperty("config") Map<String, String> config,
+        @JsonProperty("tasks") List<ConnectorTaskId> tasks,
+        @JsonProperty("type") ConnectorType type,
+        @JsonProperty("offsets_status") String offsetsStatus
+    ) {
+        this.name = name;
+        this.config = config;
+        this.tasks = tasks;
+        this.type = type;
+        this.offsetsStatus = offsetsStatus;
+    }
+
+    /**
+     * Convenience constructor for the endpoints that have no offsets status to report.
+     */
+    public ConnectorInfo(String name, Map<String, String> config, List<ConnectorTaskId> tasks, ConnectorType type) {
+        this(name, config, tasks, type, null);
+    }
+
+    /**
+     * @return a copy of this instance carrying the given offsets status
+     */
+    public ConnectorInfo withOffsetsStatus(String offsetsStatus) {
+        return new ConnectorInfo(name, config, tasks, type, offsetsStatus);
+    }
 }
